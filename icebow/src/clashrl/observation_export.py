@@ -72,6 +72,29 @@ def _r(v, n=4):
     return None if v is None else round(float(v), n)
 
 
+# Clash Royale's elixir phases, expressed in TIME REMAINING because that is what the screen
+# shows. The equivalent thresholds in elapsed seconds live in config.yaml as
+# elixir.double_time_s / triple_time_s and drive the live ElixirClock; both describe the same
+# rule, and the config carries the note that overtime's FIRST minute is still DOUBLE -- a
+# correction made after x3 was being called a minute early. Getting this wrong is expensive:
+# overtime is exactly when a six-cost win condition becomes affordable.
+_LAST_MINUTE_S = 60.0
+
+
+def elixir_multiplier(phase: Optional[str], seconds_left: Optional[float]) -> Optional[int]:
+    """1 / 2 / 3 from the on-screen clock, or None when the clock could not be read.
+
+    None rather than 1: a consumer integrating a multiplier that is silently too low drifts
+    for the rest of the match, and nothing downstream could tell that it had happened.
+    """
+    if phase is None or seconds_left is None:
+        return None
+    last_minute = float(seconds_left) <= _LAST_MINUTE_S
+    if phase == "overtime":
+        return 3 if last_minute else 2
+    return 2 if last_minute else 1
+
+
 def observe(cfg, frame, detector_conf: float = 0.25, prev: Optional[Dict] = None,
             assume_match: bool = False, tracker=None) -> Dict[str, Any]:
     """Read EVERYTHING off one BGR frame. `prev` (an earlier record) enables velocity.
@@ -130,6 +153,16 @@ def observe(cfg, frame, detector_conf: float = 0.25, prev: Optional[Dict] = None
     if not in_match:
         out["note"] = "not in a match; the blocks below are unread, not zero"
 
+    # -- where in the match --------------------------------------------------
+    # Read off the SCREEN, so it works on a frame we did not capture ourselves: a dataset
+    # image, a trimmed recording, a match we joined late. The live bot's ElixirClock cannot
+    # do that -- it only knows how long IT has been watching.
+    try:
+        from .clock_ocr import read_clock
+        out["match"] = read_clock(frame)
+    except Exception as exc:                                        # noqa: BLE001
+        out["match"] = {"seconds_left": None, "phase": None, "error": str(exc)}
+
     # -- hand ---------------------------------------------------------------
     hand: Dict[str, Any] = {"method": "template match against templates/cards/*.png",
                             "reliability": "deck-bound: only cards with a template can be named",
@@ -175,11 +208,18 @@ def observe(cfg, frame, detector_conf: float = 0.25, prev: Optional[Dict] = None
         elixir["max"] = 10
     except Exception as exc:                                        # noqa: BLE001
         elixir["error"] = str(exc)
-    # The 1x/2x/3x phase is TIME-DERIVED and needs match context a single frame does not have.
-    # Saying "unknown from one frame" is the honest answer; the live bot gets it from ElixirClock.
-    elixir["multiplier"] = None
-    elixir["multiplier_note"] = ("not derivable from one frame -- clock.ElixirClock tracks it from "
-                                 "elapsed match time, cross-checked against the on-screen badge")
+    # The 1x/2x/3x phase is TIME-DERIVED, and the time is now READ OFF THE SCREEN rather than
+    # counted from when we started watching -- so a single frame CAN answer this after all, as
+    # long as its clock panel was legible. When it was not, the answer stays null instead of
+    # falling back to 1: a consumer integrating a wrong multiplier would drift all match.
+    m = out.get("match") or {}
+    left, phase = m.get("seconds_left"), m.get("phase")
+    elixir["multiplier"] = elixir_multiplier(phase, left)
+    elixir["multiplier_note"] = (
+        "the clock panel was not legible on this frame, so the phase is unknown; it is NOT "
+        "assumed to be 1x" if elixir["multiplier"] is None else
+        f"from the on-screen clock ({phase}, {left}s left). Overtime's FIRST minute is still "
+        f"DOUBLE elixir, not triple -- the same rule the live ElixirClock follows")
     out["elixir"] = elixir
 
     # -- towers -------------------------------------------------------------
@@ -213,6 +253,21 @@ def observe(cfg, frame, detector_conf: float = 0.25, prev: Optional[Dict] = None
     except Exception as exc:                                        # noqa: BLE001
         towers["error"] = str(exc)
     out["towers"] = towers
+
+    # Crowns need no reader of their own: in Clash Royale a crown IS a felled tower, and the
+    # block above already says which towers are gone. `towers_unread` is carried along so a
+    # consumer can tell "no crowns yet" from "we could not read two of the towers".
+    destroyed_mine = sum(1 for t in towers["list"]
+                         if t.get("side") == "mine" and t.get("state") == "destroyed")
+    destroyed_enemy = sum(1 for t in towers["list"]
+                          if t.get("side") == "enemy" and t.get("state") == "destroyed")
+    out["crowns"] = {
+        "mine": destroyed_enemy, "enemy": destroyed_mine,
+        "towers_unread": sum(1 for t in towers["list"]
+                             if t.get("state") in (None, "no_bar", "no_match")),
+        "method": "count of towers whose state is `destroyed`; crowns and felled towers are "
+                  "the same number in Clash Royale",
+        "note": "`mine` counts crowns WE hold, i.e. ENEMY towers down"}
 
     # -- units --------------------------------------------------------------
     units: Dict[str, Any] = {"method": f"YOLO board detector at conf>={detector_conf}",
