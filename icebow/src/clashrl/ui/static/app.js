@@ -1761,6 +1761,18 @@ function recordCard(rec) {
   const mot = rec.motion || {};
   row("motion", mot.available ? `${(mot.units || []).length} unit(s)` : "needs two frames",
       "the Live tab is the only path that has a previous frame to compare against");
+  const m = rec.match || {};
+  row("clock", m.seconds_left == null ? "not legible" : `${m.text} (${m.phase})`,
+      "read off the screen panel, so it is right even on a frame we did not capture ourselves. "
+      + "The phase comes from the panel's BACKGROUND colour, not from the printed word.");
+  const el_ = rec.elixir || {};
+  row("elixir multiplier", el_.multiplier == null ? "unknown (clock unread)" : `x${el_.multiplier}`,
+      "derived from the clock. Overtime's FIRST minute is still DOUBLE, not triple. "
+      + "Never assumed to be x1 when the clock could not be read.");
+  const cr = rec.crowns || {};
+  row("crowns", `${cr.mine ?? "?"} - ${cr.enemy ?? "?"}`,
+      "counted from towers whose state is `destroyed`"
+      + (cr.towers_unread ? ` -- ${cr.towers_unread} tower(s) unread, so this may be low` : ""));
   const g = el("div", "statgrid"); g.appendChild(c); box.appendChild(g);
 
   // Collapsed by default: this is a wall of JSON, and it is here to be COPIED, not read.

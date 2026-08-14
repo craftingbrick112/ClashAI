@@ -103,9 +103,46 @@ no `templates/next/` — then it is simply unreadable, not absent.
 ### `elixir`
 `value` 0–10, counted as filled pips by colour.
 
-`multiplier` is **always `null` in a single-frame record** — the 1×/2×/3× phase is derived from
-elapsed match time, which one frame cannot show. The live bot gets it from `clock.ElixirClock`.
-Emitting `1` here would be a guess a simulator would integrate as fact.
+`multiplier` is derived from the **on-screen clock** (see `match` below), so a single frame
+does answer it after all — as long as its clock panel was legible.
+
+| phase | time left | multiplier |
+|---|---|---|
+| regular | > 1:00 | 1 |
+| regular | ≤ 1:00 | 2 |
+| overtime | > 1:00 | **2** |
+| overtime | ≤ 1:00 | 3 |
+
+**Overtime's first minute is still DOUBLE, not triple.** When the clock could not be read the
+value is `null`, never `1` — a multiplier that is silently too low is integrated as fact and
+drifts for the rest of the match.
+
+### `match` — where in the match this frame sits
+
+| field | meaning |
+|---|---|
+| `seconds_left` | from the timer panel, or `null` |
+| `phase` | `regular` / `overtime`, from the panel's **background colour**, not the printed word |
+| `clock_text` | the raw read, e.g. `"2:37"` |
+| `conf` | margin between the best and second-best glyph template |
+
+The panel is **found**, not assumed at a fixed box — captures differ in whether they include
+the window title bar, and a hard-coded rectangle reads the wrong pixels on the next machine.
+
+**Measured.** Against two session recordings with known frame timestamps the value falls at
+−1.000 / −0.999 s per second (true −1.000), max residual 0.5 s, **0 outliers in 574 reads**.
+Read rate is **55.9 %** on 401 own-client arena frames; of those reads **0** break the phase
+ceiling (regular ≤ 3:00, overtime ≤ 2:00). Across 674 home-screen frames — where a gold
+counter sits in the same corner in the same white text — it produced **0** readings. It
+refuses far more often than it errs, which is the trade this format wants.
+
+### `crowns`
+```json
+{"mine": 1, "enemy": 0, "towers_unread": 0}
+```
+No reader of its own: a crown *is* a felled tower, and `towers` already says which are gone.
+**`mine` counts crowns WE hold, i.e. ENEMY towers down.** `towers_unread` separates "no crowns
+yet" from "two towers could not be read".
 
 ### `towers` — six entries
 `E1`,`E2` (enemy princess), `M1`,`M2` (yours), `K_enemy`, `K_mine` (kings).
@@ -231,10 +268,8 @@ Stated plainly so you don't plan around data that doesn't exist:
 | **Absolute troop HP** | `bars` gives a *fraction*. Multiplying by max HP needs the unit's LEVEL, which nothing reads. |
 | **Unit levels** | The only dataset that labels the level badge has it in **86 frames**. That is not a training set, so there is no reader and no near-term path to one. |
 | **Status effects** (rage, freeze, shield, invisible…) | Ground truth exists but is far too thin: of seven flags, three have **zero** positive examples, `shield` appears only on one card, and the rest total ~4,300 boxes across dozens of classes. |
-| **Crown count** | no reader built |
-| **Match clock (mm:ss)** | not OCR'd; the live bot tracks elapsed time instead |
-| **Tower ground position** | only the HP bar's position is known — see the coordinate section |
-| **Elixir multiplier** | needs match context, not one frame |
+| **Tower ground position** | only the HP bar's position is known — see the coordinate section. Not filled in with a board constant, because the two measured bar positions are not mirror images and there is nothing to check a constant against |
+| **What a spell was** | a spell that hits nothing leaves no unit to detect |
 
 ---
 
@@ -266,6 +301,16 @@ validation split above holds a further 1,452 boxes and is never trained on.
 Per-class recall varies a lot — common units (`skeletons` n=167, `knight` n=91) sit at 0.78–0.80,
 while classes with few validation instances are noisy by construction. **Treat any per-class
 number with n < 20 as indicative only.**
+
+---
+
+## A whole match, not one frame
+
+This document describes ONE frame. A simulator wants a match, and four things only a sequence
+can answer — what was played, how fast things move, what the opponent can afford, and which
+unit is the same as before. Those live in **[EPISODE_FORMAT.md](EPISODE_FORMAT.md)**
+(`clashai-episode/1`), produced from the panel with **Vision AI → 6. Record a match for the
+simulator**.
 
 ---
 

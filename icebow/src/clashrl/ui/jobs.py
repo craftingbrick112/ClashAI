@@ -300,6 +300,49 @@ COMMANDS: List[Dict[str, Any]] = [
         ],
     },
     {
+        # The whole hand-off to the simulator was CLI-only: `run.py observe` on one saved
+        # frame. One frame is a snapshot, and a simulator learns from a MATCH -- so the thing
+        # the project actually needs to export had no button at all.
+        "cmd": "episode",
+        "group": "Vision AI", "stage": "use",
+        "title": "6. Record a match for the simulator",
+        "desc": "Watches the live game and writes the whole match to one .jsonl in "
+                "data/exports/ -- every tick with unit positions in arena tiles, per-unit HP, "
+                "the clock, crowns, what each side played, and an estimate of the opponent's "
+                "elixir. Stops on its own when the match ends. Point it at a recorded session "
+                "video instead with the field below. Nothing is uploaded; it writes a file.",
+        "gpu": False,
+        "metrics": False,
+        "args": [
+            {"name": "video", "type": "str", "default": "",
+             "label": "Recorded video instead of the live window",
+             "help": "Leave EMPTY to record the running game. A path here (e.g. "
+                     "data/sessions/20260807_205928/video.mp4) reads that recording instead. "
+                     "Measured caveat: the saved session videos are a different resolution "
+                     "from the frames the detector was trained on, and it finds 0.44 units "
+                     "per frame on them against 3.56 on live-sized frames -- so a video "
+                     "export is a much thinner trace than a live one."},
+            {"name": "interval", "type": "float", "default": 1.0,
+             "label": "Seconds between ticks (live only)",
+             "help": "1.0 is about as fast as this machine reads a full record. Lower it and "
+                     "ticks start overlapping, which shows up as an uneven `dt` rather than "
+                     "as an error."},
+            {"name": "minutes", "type": "float", "default": 6.0,
+             "label": "Stop after (minutes, live only)",
+             "help": "A safety net only -- recording ends by itself once the match screen is "
+                     "gone for three ticks. A full match with overtime is about 6 minutes."},
+            {"name": "every", "type": "int", "default": 3,
+             "label": "Take every Nth frame (video only)",
+             "help": "3 at 12 fps gives about 4 ticks a second. Raise it for a quick look at "
+                     "a long recording."},
+            {"name": "conf", "type": "float", "default": 0.25,
+             "label": "Detector confidence gate",
+             "help": "Lower finds more units and more false ones. 0.25 is what the observation "
+                     "record uses everywhere else; changing it here makes this export "
+                     "incomparable with the others."},
+        ],
+    },
+    {
         "cmd": "label",
         "group": "Playing AI", "stage": "data",
         "title": "Prepare imitation data",
