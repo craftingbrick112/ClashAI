@@ -331,6 +331,17 @@ def _cmd_observe(args) -> None:
         print(text)
 
 
+def _cmd_episode(args) -> None:
+    from .episode_run import episode_from_video, episode_live
+    cfg = Config.load(args.config)
+    if args.video:
+        episode_from_video(cfg, args.video, args.out, every=args.every, conf=args.conf,
+                           limit=args.limit)
+    else:
+        episode_live(cfg, args.out, interval=args.interval, minutes=args.minutes,
+                     conf=args.conf)
+
+
 def _cmd_detect_pack(args) -> None:
     from .detect_pack import detect_pack
     detect_pack(Config.load(args.config), out=args.out, own_only=args.own_only,
@@ -808,6 +819,24 @@ def main() -> None:
                          "UNKNOWN. Needed for frames from someone else's client, where the "
                          "state templates do not match and every reader would suppress itself")
     ob.set_defaults(func=_cmd_observe)
+
+    epi = sub.add_parser("episode",
+                         help="record a WHOLE match as a stream of observation records (JSONL) -- "
+                              "the same per-frame format plus what only a stream knows: what was "
+                              "played, per-unit velocity, crowns, the clock, and an estimate of "
+                              "the opponent's elixir")
+    epi.add_argument("--video", default=None,
+                     help="read a recorded session video instead of the live window")
+    epi.add_argument("--out", default=None, help="output .jsonl (default: data/exports/...)")
+    epi.add_argument("--conf", type=float, default=0.25, help="detector confidence gate")
+    epi.add_argument("--every", type=int, default=3,
+                     help="video only: take every Nth frame (default 3, i.e. ~4 Hz at 12 fps)")
+    epi.add_argument("--limit", type=int, default=0, help="video only: stop after N ticks (0 = all)")
+    epi.add_argument("--interval", type=float, default=1.0,
+                     help="live only: seconds between ticks")
+    epi.add_argument("--minutes", type=float, default=6.0,
+                     help="live only: stop after this long")
+    epi.set_defaults(func=_cmd_episode)
 
     mdl = sub.add_parser("models",
                          help="which NETWORKS exist and which one each path actually uses -- there "
