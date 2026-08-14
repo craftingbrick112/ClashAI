@@ -147,5 +147,47 @@ class TestClockReaderRefuses(unittest.TestCase):
         self.assertIsNone(clock_ocr.read_clock(frame)["seconds_left"])
 
 
+
+
+class TestTowerBarPlausibility(unittest.TestCase):
+    """The bar detector calls the Windows taskbar a tower bar. It is right about the shape."""
+
+    @staticmethod
+    def _bar(cy, w=0.1):
+        return (0.4, cy - 0.01, 0.4 + w, cy + 0.01)
+
+    def test_the_bottom_of_the_screen_is_not_a_tower(self):
+        from clashrl.troop_hp import plausible_tower_bars
+        bars = [self._bar(0.15), self._bar(0.63), self._bar(0.95)]
+        keep = plausible_tower_bars(bars, [0.9, 0.9, 0.9], hand_top=0.84)
+        self.assertEqual(sorted(keep), [0, 1])
+
+    def test_at_most_three_per_side(self):
+        from clashrl.troop_hp import plausible_tower_bars
+        # Five candidates up top, five down below; the game draws three each.
+        bars = [self._bar(0.10 + 0.01 * i) for i in range(5)]
+        bars += [self._bar(0.60 + 0.01 * i) for i in range(5)]
+        confs = [0.9, 0.8, 0.7, 0.6, 0.5] * 2
+        keep = plausible_tower_bars(bars, confs, hand_top=0.84)
+        self.assertEqual(len(keep), 6)
+        self.assertEqual(sum(1 for i in keep if i < 5), 3)
+        self.assertEqual(sum(1 for i in keep if i >= 5), 3)
+
+    def test_it_keeps_the_most_confident_ones(self):
+        from clashrl.troop_hp import plausible_tower_bars
+        bars = [self._bar(0.12), self._bar(0.14), self._bar(0.16), self._bar(0.18)]
+        keep = plausible_tower_bars(bars, [0.4, 0.95, 0.9, 0.85], hand_top=0.84)
+        self.assertNotIn(0, keep)          # the 0.40 one is the odd one out
+        self.assertEqual(sorted(keep), [1, 2, 3])
+
+    def test_a_low_confidence_king_bar_survives(self):
+        # The enemy KING bar averages 0.74 -- lower than some of the junk -- so position and
+        # count do the filtering, never a confidence floor.
+        from clashrl.troop_hp import plausible_tower_bars
+        bars = [self._bar(0.02), self._bar(0.15), self._bar(0.16)]
+        keep = plausible_tower_bars(bars, [0.62, 0.93, 0.92], hand_top=0.84)
+        self.assertIn(0, keep)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,3 +5,12 @@ data/
 *.pt
 cr_token.txt
 .env
+
+# Training output: weights are already covered by *.pt, but a run also drops ~19 MB of
+# curves, confusion matrices, sample batches and results.csv. Rebuilt by every training
+# run and meaningless on another machine.
+runs/
+
+# Card art pulled from the wiki by `cards-art`. Third-party images, rebuildable, and
+# ~14 MB -- they belong on disk, not in the history of everyone who clones this.
+templates/cardart/

@@ -346,7 +346,8 @@ def _bars_block(cfg, frame, grid, unit_list: List[Dict]) -> Dict[str, Any]:
     see rather than have quietly dropped.
     """
     global _BAR_MODEL
-    from .troop_hp import bar_team, match_bars, read_fill
+    from .troop_hp import (bar_team, hand_top_from, match_bars,
+                           plausible_tower_bars, read_fill)
 
     block: Dict[str, Any] = {
         "available": False,
@@ -403,22 +404,31 @@ def _bars_block(cfg, frame, grid, unit_list: List[Dict]) -> Dict[str, Any]:
             if ui is not None and frac is not None:
                 unit_list[ui]["hp"] = {"frac": _r(frac, 3), "method": "bar fill"}
 
-        for i, k in enumerate(kinds):
-            if k != "hp_bar":
-                cx = (bars[i][0] + bars[i][2]) / 2
-                cy = (bars[i][1] + bars[i][3]) / 2
-                tf = read_fill(frame, bars[i])
-                block["list"].append({"kind": "tower", "conf": _r(confs[i], 3),
-                                      # `or 0.0` here would report an UNREADABLE bar as an
-                                      # empty one, i.e. a destroyed tower. Null means null.
-                                      "fill": None if tf is None else _r(tf, 3),
-                                      # bar_team() is a UNIT-bar reader. Tower bars overlap
-                                      # almost completely in hue between the two sides, so it
-                                      # would answer confidently and wrongly. The `towers`
-                                      # block already carries each tower's side.
-                                      "team": None,
-                                      "xy": [_r(cx), _r(cy)], "tile": grid.tile(cx, cy),
-                                      "unit_index": None})
+        # The detector will happily call the taskbar a tower bar. Six is the most the game
+        # ever draws, and none of them are at the bottom of the screen -- so the count and
+        # the position are enough, and no confidence floor is needed (the enemy KING bar
+        # scores lower than some of the junk).
+        tower_idx = [i for i, k in enumerate(kinds) if k != "hp_bar"]
+        kept = plausible_tower_bars([bars[i] for i in tower_idx],
+                                    [confs[i] for i in tower_idx],
+                                    hand_top=hand_top_from(cfg))
+        block["tower_bars_rejected"] = len(tower_idx) - len(kept)
+        for k_ in kept:
+            i = tower_idx[k_]
+            cx = (bars[i][0] + bars[i][2]) / 2
+            cy = (bars[i][1] + bars[i][3]) / 2
+            tf = read_fill(frame, bars[i])
+            block["list"].append({"kind": "tower", "conf": _r(confs[i], 3),
+                                  # `or 0.0` here would report an UNREADABLE bar as an
+                                  # empty one, i.e. a destroyed tower. Null means null.
+                                  "fill": None if tf is None else _r(tf, 3),
+                                  # bar_team() is a UNIT-bar reader. Tower bars overlap
+                                  # almost completely in hue between the two sides, so it
+                                  # would answer confidently and wrongly. The `towers`
+                                  # block already carries each tower's side.
+                                  "team": None,
+                                  "xy": [_r(cx), _r(cy)], "tile": grid.tile(cx, cy),
+                                  "unit_index": None})
         block["available"] = True
     except Exception as exc:                                        # noqa: BLE001
         block["error"] = str(exc)

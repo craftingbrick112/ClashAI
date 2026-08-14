@@ -178,3 +178,67 @@ def hp_for_units(frame: np.ndarray, bars: Sequence[Box],
         if f is not None:
             res[ui] = f
     return res
+
+
+# --- tower bars: there are at most six, and they are never at the bottom of the screen ---
+#
+# The bar detector is a plain object detector: it reports a tower bar wherever something
+# looks like one, and the bottom strip of a real capture is full of things that do -- the
+# card slots, and on a windowed capture the Windows taskbar and its search field. Measured
+# over 120 own-client frames it returned up to EIGHT tower bars on a single frame, when the
+# game only ever draws six, and 23% of them fell outside the arena entirely.
+#
+# The two signals that separate them were measured on the same frames:
+#
+#   position    real tower bars sit at cy 0.00-0.20 (enemy) and 0.60-0.80 (own). NOTHING
+#               real was found below 0.80; the junk band is 0.90-1.00.
+#   confidence  the junk averages 0.56, the real bars 0.90.
+#
+# Position is used rather than a confidence floor, because a confidence floor high enough to
+# cut 0.56 would also cut the enemy KING bar, which averages 0.74 -- it is small and often
+# half-covered, and it is the one bar we least want to lose.
+_TOWERS_PER_SIDE = 3
+
+
+def plausible_tower_bars(bars: Sequence[Box], confs: Sequence[float],
+                         hand_top: float = 0.84) -> List[int]:
+    """Indices of the tower-bar boxes that could actually BE tower bars, best first.
+
+    ``hand_top`` is where the card row begins; anything at or below it is part of the UI,
+    not the arena. It defaults to a measured value but should be passed from the hand slot
+    positions in config.yaml, so it follows a client whose layout differs.
+
+    Splitting by the arena mid-line is safe here in a way that colour is not: tower bars do
+    NOT separate by hue (see ``bar_team``), but towers sit at fixed ends of the board, so
+    "above the middle" and "below the middle" is a fact about the game, not a guess.
+    """
+    upper: List[Tuple[float, int]] = []
+    lower: List[Tuple[float, int]] = []
+    for i, b in enumerate(bars):
+        cy = (b[1] + b[3]) / 2.0
+        if cy >= hand_top:
+            continue
+        (upper if cy < 0.5 else lower).append((float(confs[i]), i))
+    keep: List[Tuple[float, int]] = []
+    for side in (upper, lower):
+        side.sort(reverse=True)
+        keep.extend(side[:_TOWERS_PER_SIDE])
+    keep.sort(reverse=True)
+    return [i for _c, i in keep]
+
+
+def hand_top_from(cfg) -> float:
+    """Top of the card row, from the SAME hand slots the card reader is calibrated to.
+
+    Derived rather than hard-coded so it moves with a client whose hand sits elsewhere; the
+    fallback is the measured value for this one.
+    """
+    try:
+        slots = cfg.get("hand", "slots", default=None) or []
+        ys = [float(s[1]) for s in slots if s]
+        if ys:
+            # Half a card above the slot centre: the crop height the reader uses around it.
+            return max(0.0, min(ys) - float(cfg.get("hand", "h", default=0.075)) / 2.0 - 0.01)
+    except Exception:                                       # noqa: BLE001
+        pass
+    return 0.84

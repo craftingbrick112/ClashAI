@@ -1666,8 +1666,13 @@ function labDelete(i) {
 /* Every reader's region drawn on the same frame, in its own colour. The point is that a
    wrong number is almost always a crop sitting in the wrong place -- which you can SEE
    here, and cannot see in a log line that just says the HP is 7151. */
-const READ_COLOURS = { hand: "#8bb0d8", elixir: "#c08ad8", tower: "#d8a24a", unit: "#6f9b7c",
-                       bar: "#d8d24a" };
+/* A tower carries TWO boxes on purpose: the HP reader (digit CNN + its own colour bar,
+   from a calibrated window) and the bar DETECTOR (a neural net that finds bars anywhere).
+   They are separate readers and disagreeing is informative -- but they used to be drawn in
+   #d8a24a and #d8d24a, which is the same orange to any eye, so the pair looked like one
+   reader emitting a duplicate. Orange = the calibrated window, yellow-green = the net. */
+const READ_COLOURS = { hand: "#8bb0d8", elixir: "#c08ad8", tower: "#e07b28", unit: "#6f9b7c",
+                       bar: "#c8e04a" };
 
 function labDrawRead(g, cv) { drawRead(g, cv, LAB.read); }
 
@@ -1695,7 +1700,7 @@ function drawRead(g, cv, r) {
     const txt = t.state === "no_match" ? ""
       : t.state === "destroyed" ? "destroyed"
       : t.state === "no_bar" ? "king: no bar"
-      : t.hp != null ? `${t.hp}${pc ? "  " + pc : ""}` : (pc || "?");
+      : t.hp != null ? `HP ${t.hp}${pc ? "  " + pc : ""}` : (pc ? `HP bar ${pc}` : "HP ?");
     rect(t.bar || t.box, READ_COLOURS.tower, txt);
   });
   (r.elixir && r.elixir.pips || []).forEach((p, i) => {
@@ -1709,7 +1714,9 @@ function drawRead(g, cv, r) {
   (r.bars && r.bars.boxes || []).forEach(b => {
     // "?" is an unmatched bar, and it is deliberately loud: it usually means the BOARD
     // detector missed a unit that is plainly standing there.
-    const who = b.kind === "tower" ? "tower" : (b.of || "?");
+    // Named for the READER, not the thing: this box and the orange one next to it are two
+    // different measurements of the same tower, and the label has to say which is which.
+    const who = b.kind === "tower" ? "bar-net tower" : (b.of || "?");
     rect(b.box, READ_COLOURS.bar,
          `${who} ${b.fill == null ? "--" : Math.round(b.fill * 100) + "%"}`);
   });

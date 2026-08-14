@@ -189,7 +189,8 @@ def read_bgr(cfg, frame, detector_conf: float = 0.25) -> Dict[str, Any]:
                                    "left end carries the unit's level badge",
                             "trained": True, "boxes": []}
     try:
-        from ..troop_hp import bar_team, match_bars, read_fill
+        from ..troop_hp import (bar_team, hand_top_from, match_bars,
+                                plausible_tower_bars, read_fill)
         w_ = Path(cfg.path("runs/bars/v1/weights/best.pt"))
         if not w_.is_file():
             bars["error"] = "no bar detector trained yet"
@@ -221,9 +222,15 @@ def read_bgr(cfg, frame, detector_conf: float = 0.25) -> Dict[str, Any]:
                     "box": {"x": boxes[i][0], "y": boxes[i][1],
                             "w": boxes[i][2] - boxes[i][0], "h": boxes[i][3] - boxes[i][1]},
                 })
-            for i, k in enumerate(kinds):
-                if k == "hp_bar":
-                    continue
+            # Six tower bars is the most Clash Royale ever draws, and none of them are down
+            # by the card row. Without this the detector labels the taskbar and the search
+            # field "tower" -- visible on the overlay, and eight of them on one frame.
+            tb = [i for i, k in enumerate(kinds) if k != "hp_bar"]
+            kept = plausible_tower_bars([boxes[i] for i in tb], [confs[i] for i in tb],
+                                        hand_top=hand_top_from(cfg))
+            bars["tower_rejected"] = len(tb) - len(kept)
+            for k_ in kept:
+                i = tb[k_]
                 f = read_fill(frame, boxes[i])
                 bars["boxes"].append({
                     "kind": "tower", "conf": round(confs[i], 3),

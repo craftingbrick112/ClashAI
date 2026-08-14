@@ -306,37 +306,41 @@ COMMANDS: List[Dict[str, Any]] = [
         "cmd": "episode",
         "group": "Vision AI", "stage": "use",
         "title": "6. Record a match for the simulator",
-        "desc": "Watches the live game and writes the whole match to one .jsonl in "
-                "data/exports/ -- every tick with unit positions in arena tiles, per-unit HP, "
-                "the clock, crowns, what each side played, and an estimate of the opponent's "
-                "elixir. Stops on its own when the match ends. Point it at a recorded session "
-                "video instead with the field below. Nothing is uploaded; it writes a file.",
+        "desc": "Start a match, then press Start. Writes the whole match to one .jsonl in "
+                "data/exports/ and stops by itself when the match ends -- every tick with "
+                "unit positions in arena tiles, per-unit HP, the clock, crowns, what each "
+                "side played, and an estimate of the opponent's elixir. The last line of the "
+                "file says how good the recording actually was. Nothing is uploaded.\n\n"
+                "The first two settings apply to a live recording. The two after them only "
+                "do anything if you fill in the video field, which switches this to reading "
+                "a saved recording instead of the live game.",
         "gpu": False,
         "metrics": False,
         "args": [
-            {"name": "video", "type": "str", "default": "",
-             "label": "Recorded video instead of the live window",
-             "help": "Leave EMPTY to record the running game. A path here (e.g. "
-                     "data/sessions/20260807_205928/video.mp4) reads that recording instead. "
-                     "Measured caveat: the saved session videos are a different resolution "
-                     "from the frames the detector was trained on, and it finds 0.44 units "
-                     "per frame on them against 3.56 on live-sized frames -- so a video "
-                     "export is a much thinner trace than a live one."},
             {"name": "interval", "type": "float", "default": 1.0,
-             "label": "Seconds between ticks (live only)",
+             "label": "Seconds between ticks",
              "help": "1.0 is about as fast as this machine reads a full record. Lower it and "
-                     "ticks start overlapping, which shows up as an uneven `dt` rather than "
-                     "as an error."},
+                     "ticks start overlapping, which shows up as an uneven `dt` in the file "
+                     "rather than as an error."},
             {"name": "minutes", "type": "float", "default": 6.0,
-             "label": "Stop after (minutes, live only)",
-             "help": "A safety net only -- recording ends by itself once the match screen is "
-                     "gone for three ticks. A full match with overtime is about 6 minutes."},
+             "label": "Give up after (minutes)",
+             "help": "A safety net only -- recording ends by itself once the match screen has "
+                     "been gone for three ticks. A full match with overtime is about 6 min."},
+            {"name": "video", "type": "str", "default": "",
+             "label": "Read a saved video instead (leave empty for live)",
+             "help": "EMPTY = record the running game, which is what you normally want. A "
+                     "path here (e.g. data/sessions/20260807_205928/video.mp4) reads that "
+                     "recording instead and ignores the two settings above. Measured caveat: "
+                     "the saved session videos are a different resolution from the frames the "
+                     "detector was trained on, and it finds 0.44 units per frame on them "
+                     "against 3.56 on live-sized frames -- a video export is a much thinner "
+                     "trace than a live one."},
             {"name": "every", "type": "int", "default": 3,
-             "label": "Take every Nth frame (video only)",
-             "help": "3 at 12 fps gives about 4 ticks a second. Raise it for a quick look at "
-                     "a long recording."},
+             "label": "...taking every Nth frame of that video",
+             "help": "Only used with a video above. 3 at 12 fps gives about 4 ticks a second; "
+                     "raise it for a quick look at a long recording."},
             {"name": "conf", "type": "float", "default": 0.25,
-             "label": "Detector confidence gate",
+             "label": "Detector confidence gate (both modes)",
              "help": "Lower finds more units and more false ones. 0.25 is what the observation "
                      "record uses everywhere else; changing it here makes this export "
                      "incomparable with the others."},
