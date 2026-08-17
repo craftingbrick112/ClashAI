@@ -33,6 +33,83 @@ from typing import Any, Dict, List, Optional, Tuple
 _NEVER = ("cr_api_token.txt", "cr_token.txt", ".env", "credentials.json")
 
 
+# An Ultralytics checkpoint carries the training run's metadata, and a run started on this
+# machine records where it started: `git.root`, `train_args.data` and `train_args.project` all
+# come out as C:\Users\<name>\... . That is the Windows account name of whoever trained it,
+# published to everyone who downloads the file. Measured on ours: the vision model is clean
+# (it was trained on Kaggle, so its paths are /kaggle/temp/...) and the bar detector is not
+# (three fields, all absolute local paths).
+#
+# None of these fields are used for inference, so they are reduced to the last path component
+# -- which keeps the metadata readable ("it was trained from data.yaml") without saying whose
+# desktop it sat on.
+_PATH_RE = __import__("re").compile(r"^(?:[A-Za-z]:[\\/]|[\\/]|~)")
+_SCRUB_GIT = ("root", "origin", "message")
+# A path only names a PERSON when it runs through a home directory. /kaggle/temp/... is an
+# absolute path too and identifies nobody, so the two are reported differently rather than
+# both being announced as a username leak.
+_HOME_RE = __import__("re").compile(r"(?i)[\\/](?:users|home)[\\/]")
+
+
+def _scrub(p: Path) -> Tuple[Optional[Path], List[str], bool]:
+    """Rewrite a checkpoint without the local paths.
+
+    Returns (new file, fields changed, whether any named a person); (None, [], False) if clean.
+    The field list is reported rather than a bare "cleaned": on our two detectors it is the
+    difference between three absolute paths (the bar model, trained here) and one leftover
+    string (the vision model, trained on Kaggle) -- and claiming a username leak on the
+    second would be a scare over nothing."""
+    try:
+        import torch
+        ck = torch.load(p, map_location="cpu", weights_only=False)
+    except Exception:                                           # noqa: BLE001
+        return None, [], False
+    if not isinstance(ck, dict):
+        return None, [], False
+    changed: List[str] = []
+    named = False               # did any removed value name a person?
+
+    def args_of(o):
+        """The `args` dict a checkpoint's model/EMA object carries, if it has one."""
+        a = getattr(o, "args", None)
+        return a if isinstance(a, dict) else None
+
+    # Every dict that can hold a path. `train_args` is NOT the only copy: the model object and
+    # the EMA each carry their own `args`, which is how a first pass over `train_args` alone
+    # left the account name in the file -- caught by grepping the packed bytes for it, not by
+    # reading the code.
+    targets = [("train_args", ck.get("train_args"))]
+    for key in ("model", "ema"):
+        a = args_of(ck.get(key))
+        if a is not None:
+            targets.append((f"{key}.args", a))
+
+    for label, d in targets:
+        if not isinstance(d, dict):
+            continue
+        for k, v in list(d.items()):
+            if isinstance(v, str) and _PATH_RE.match(v):
+                named = named or bool(_HOME_RE.search(v))
+                d[k] = Path(v).name
+                changed.append(f"{label}.{k}")
+
+    g = ck.get("git")
+    if isinstance(g, dict):
+        for k in _SCRUB_GIT:
+            # 'None' as a STRING is what an out-of-repo run writes. Blanking it would be a
+            # change with nothing behind it, and would report a leak that never existed.
+            if g.get(k) and str(g[k]) != "None":
+                named = named or bool(_HOME_RE.search(str(g[k])))
+                g[k] = None
+                changed.append(f"git.{k}")
+
+    if not changed:
+        return None, [], False
+    out = p.parent / (p.stem + ".scrubbed.pt")
+    torch.save(ck, out)
+    return out, changed, named
+
+
 def _stamp(p: Path) -> Dict[str, Any]:
     st = p.stat()
     return {"file": p.name,
@@ -221,17 +298,35 @@ def model_pack(cfg, out: Optional[str] = None, vision: bool = True, bars: bool =
                           for k, v in picked.items()},
                 "note": "sizes and dates are of the FILES packed, read at pack time"}
 
+    scrubbed: List[Path] = []
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
         for src, arc in files:
             if src.name in _NEVER:
                 print(f"[model-pack] REFUSED to pack {src.name}")
                 continue
+            if src.suffix == ".pt":
+                clean, changed, named = _scrub(src)
+                if clean is not None:
+                    why = ("paths through a home directory -- they carried the account "
+                           "name of whoever trained it" if named
+                           else "absolute paths from the training host (no account name)")
+                    print(f"[model-pack] {arc}: blanked {', '.join(changed)} ({why})")
+                    z.write(clean, arc)
+                    scrubbed.append(clean)
+                    manifest.setdefault("scrubbed", {})[arc] = changed
+                    continue
             z.write(src, arc)
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
         z.writestr("README.md", _readme(picked))
         for k, v in picked.items():
             if v.get("class_names"):
                 z.writestr(f"{k}/classes.txt", "\n".join(v["class_names"]) + "\n")
+
+    for f in scrubbed:                     # the temp copies, not the originals
+        try:
+            f.unlink()
+        except Exception:                                       # noqa: BLE001
+            pass
 
     mb = dest.stat().st_size / 1048576
     print(f"[model-pack] {', '.join(picked)} -> {dest}  ({mb:.1f} MB)")

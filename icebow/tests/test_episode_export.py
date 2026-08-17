@@ -220,5 +220,31 @@ def _cfg():
     from clashrl.config import Config
     return Config.load(None)
 
+
+class TestScrub(unittest.TestCase):
+    """The checkpoint carries the training run's paths, and a local run records a home dir."""
+
+    def test_a_home_path_is_recognised_as_naming_a_person(self):
+        from clashrl.model_pack import _HOME_RE
+        self.assertTrue(_HOME_RE.search(r"C:\Users\someone\Desktop"))
+        self.assertTrue(_HOME_RE.search("/home/someone/x"))
+
+    def test_a_path_that_names_nobody_is_not_reported_as_a_leak(self):
+        # /kaggle/temp/... is absolute and identifies no one. Announcing it as a username
+        # leak would be a scare over nothing, so the two are reported differently.
+        from clashrl.model_pack import _HOME_RE, _PATH_RE
+        self.assertTrue(_PATH_RE.match("/kaggle/temp/detect/data.yaml"))
+        self.assertFalse(_HOME_RE.search("/kaggle/temp/detect/data.yaml"))
+
+    def test_a_clean_checkpoint_is_packed_untouched(self):
+        # No rewrite when there is nothing to rewrite: re-saving a checkpoint for no reason
+        # would change its bytes and break any hash somebody published for it.
+        from clashrl.model_pack import _scrub
+        from pathlib import Path
+        out, changed, named = _scrub(Path(__file__))     # not a checkpoint at all
+        self.assertIsNone(out)
+        self.assertEqual(changed, [])
+        self.assertFalse(named)
+
 if __name__ == "__main__":
     unittest.main()
