@@ -200,6 +200,17 @@ def export(cfg, out: Optional[str] = None, vision: bool = False, bars: bool = Fa
             z.write(tmp, "train_on_kaggle.ipynb")
             tmp.unlink(missing_ok=True)
 
+        # Compare the two class lists BEFORE writing the README, so the warning it prints is
+        # the measured difference rather than a general caution.
+        mnames = (picked.get("vision") or {}).get("class_names")
+        cl = root / "classes.txt"
+        if mnames and (want["labels"] or want["images"]) and cl.is_file():
+            dnames = [x for x in cl.read_text(encoding="utf-8").split() if x]
+            if dnames != mnames:
+                manifest["class_lists"] = {
+                    "model": len(mnames), "dataset": len(dnames),
+                    "extra": [c for c in dnames if c not in set(mnames)]}
+
         z.writestr("manifest.json", json.dumps(manifest, indent=2))
         z.writestr("README.md", _readme(picked, manifest, own_only))
         for k, v in picked.items():
@@ -268,6 +279,35 @@ def _readme(picked: Dict[str, Dict[str, Any]], manifest: Dict[str, Any],
                  f"That is deliberate, not an accident -- this export was assembled by "
                  f"ticking parts.")
     L.append("")
+
+    # THE trap in an archive that carries both a model and labels: two files called
+    # classes.txt with different contents. Decoding the model's output with the dataset's
+    # list shifts every index past the point where they diverge, and shifts it SILENTLY --
+    # the names still look like cards. Spelled out, with the difference computed rather
+    # than described in the abstract.
+    diverge = manifest.get("class_lists")
+    if diverge and diverge["model"] != diverge["dataset"]:
+        L.append("## Careful: there are TWO class lists and they are not the same")
+        L.append("")
+        L.append(f"| file | entries | belongs to |")
+        L.append(f"|---|---|---|")
+        L.append(f"| `models/vision/classes.txt` | **{diverge['model']}** | the model's output |")
+        L.append(f"| `dataset/classes.txt` | **{diverge['dataset']}** | the label files |")
+        L.append("")
+        L.append("**Use the model's list to read the model's predictions.** The labels were "
+                 "annotated against a taxonomy that has since grown, and the detector predates "
+                 "that growth. Decoding model output with the dataset list shifts every class "
+                 "index past the point where the two diverge -- and it shifts it silently, "
+                 "because the wrong names are still card names.")
+        if diverge.get("extra"):
+            L.append("")
+            L.append("Only in the dataset list, i.e. **the model cannot predict these**: "
+                     + ", ".join(f"`{c}`" for c in diverge["extra"]) + ".")
+        L.append("")
+        L.append("The class index is positional in both files. Ultralytics reads the names out "
+                 "of the checkpoint anyway, so `YOLO(...).names` is always right; the text file "
+                 "is there for anyone not using Ultralytics.")
+        L.append("")
 
     for k in _ORDER:
         v = picked.get(k)

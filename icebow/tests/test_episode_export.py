@@ -276,5 +276,31 @@ class TestExportSelection(unittest.TestCase):
         self.assertTrue(_fmt(500 * 1048576).endswith("MB"))
         self.assertTrue(_fmt(2 * 10**9).endswith("GB"))
 
+
+class TestTwoClassLists(unittest.TestCase):
+    """A model + labels export ships two files called classes.txt with different contents."""
+
+    def test_the_readme_warns_when_they_differ(self):
+        # Decoding model output with the dataset's list shifts every index past the
+        # divergence, and shifts it silently -- the wrong names are still card names.
+        from clashrl.export import _readme
+        txt = _readme({"vision": {"file": "best.pt", "mb": 39.0, "classes": 225},
+                       "labels": {"files": 9432, "size": "1.5 MB"}},
+                      {"class_lists": {"model": 225, "dataset": 230,
+                                       "extra": ["berserker_hero"]}},
+                      own_only=False)
+        self.assertIn("TWO class lists", txt)
+        self.assertIn("225", txt)
+        self.assertIn("230", txt)
+        self.assertIn("berserker_hero", txt)
+
+    def test_no_warning_when_the_lists_agree(self):
+        # A warning that fires when there is nothing wrong trains people to ignore it.
+        from clashrl.export import _readme
+        txt = _readme({"vision": {"file": "best.pt", "mb": 39.0, "classes": 230}},
+                      {"class_lists": {"model": 230, "dataset": 230, "extra": []}},
+                      own_only=False)
+        self.assertNotIn("TWO class lists", txt)
+
 if __name__ == "__main__":
     unittest.main()
