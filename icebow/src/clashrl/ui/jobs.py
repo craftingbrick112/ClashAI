@@ -347,6 +347,43 @@ COMMANDS: List[Dict[str, Any]] = [
         ],
     },
     {
+        # Nobody could ever get a model out of here. `.gitignore` excludes `data/` and `*.pt`,
+        # and across the whole history of every branch not one weight file has been committed
+        # -- correctly, since git keeps every version forever. But the other half of that
+        # decision was never made: if the weights cannot live in the repo, something has to
+        # hand them out. People asking for the model were sent to a path that does not exist.
+        "cmd": "model-pack",
+        "group": "Vision AI", "stage": "use",
+        "title": "7. Pack the models to share them",
+        "desc": "Writes ONE zip into data/exports/ with the models you tick below, plus a "
+                "README that states each file's size, its date and (for the detectors) the "
+                "class list read out of the weights themselves. That last part matters: the "
+                "taxonomy in the repo is at 230 classes while the trained detector still has "
+                "225, so a README quoting the repo would advertise five classes the model "
+                "cannot predict.\n\n"
+                "This is the file you attach to a GitHub Release. Nothing is uploaded here, "
+                "and the API token is refused even if it is sitting in the way.",
+        "gpu": False,
+        "metrics": False,
+        "args": [
+            {"name": "vision", "type": "bool", "default": True,
+             "label": "Board detector (THE vision AI)",
+             "help": "runs/detect/vision/weights/best.pt -- which unit is where. This is the "
+                     "one people ask for. Its model card (mAP, epochs, training set size) is "
+                     "packed alongside it."},
+            {"name": "bars", "type": "bool", "default": False,
+             "label": "Health-bar detector",
+             "help": "runs/bars/v1/weights/best.pt -- a separate 2-class model that finds HP "
+                     "bars. Optional for a consumer: without it every unit's `hp` is null and "
+                     "nothing else changes."},
+            {"name": "policy", "type": "bool", "default": False,
+             "label": "Playing policy",
+             "help": "The network that decides which card goes where. Nothing to do with "
+                     "vision. Packs whichever checkpoint `play` would actually load, so what "
+                     "you share is what runs."},
+        ],
+    },
+    {
         "cmd": "label",
         "group": "Playing AI", "stage": "data",
         "title": "Prepare imitation data",

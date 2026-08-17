@@ -331,6 +331,12 @@ def _cmd_observe(args) -> None:
         print(text)
 
 
+def _cmd_model_pack(args) -> None:
+    from .model_pack import model_pack
+    model_pack(Config.load(args.config), out=args.out, vision=args.vision,
+               bars=args.bars, policy=args.policy)
+
+
 def _cmd_episode(args) -> None:
     from .episode_run import episode_from_video, episode_live
     cfg = Config.load(args.config)
@@ -837,6 +843,16 @@ def main() -> None:
     epi.add_argument("--minutes", type=float, default=6.0,
                      help="live only: stop after this long")
     epi.set_defaults(func=_cmd_episode)
+
+    mp = sub.add_parser("model-pack",
+                        help="zip the trained models for handing to somebody else -- git cannot "
+                             "hold them (.gitignore excludes *.pt), so this is what you attach "
+                             "to a GitHub Release")
+    mp.add_argument("--vision", action="store_true", help="the board detector (THE vision AI)")
+    mp.add_argument("--bars", action="store_true", help="the health-bar detector (2 classes)")
+    mp.add_argument("--policy", action="store_true", help="the playing policy")
+    mp.add_argument("--out", default=None, help="output .zip (default: data/exports/...)")
+    mp.set_defaults(func=_cmd_model_pack)
 
     mdl = sub.add_parser("models",
                          help="which NETWORKS exist and which one each path actually uses -- there "

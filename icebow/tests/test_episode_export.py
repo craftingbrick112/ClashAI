@@ -189,5 +189,36 @@ class TestTowerBarPlausibility(unittest.TestCase):
         self.assertIn(0, keep)
 
 
+
+
+class TestModelPack(unittest.TestCase):
+    """The share-a-model zip. Two things it must never do quietly."""
+
+    def test_nothing_selected_writes_nothing(self):
+        # An empty tick-box set producing an empty zip would be handed to somebody as "the
+        # model" -- so it refuses instead of writing one.
+        from clashrl import model_pack as mp
+        self.assertEqual(mp.model_pack(_cfg(), vision=False, bars=False, policy=False), {})
+
+    def test_the_secret_list_covers_the_token(self):
+        # The API token lives under data/, the same tree a naive "zip the data folder" sweeps
+        # in. Matched on NAME, so a copy in an unexpected place is still caught.
+        from clashrl.model_pack import _NEVER
+        self.assertIn("cr_api_token.txt", _NEVER)
+        self.assertIn(".env", _NEVER)
+
+    def test_class_names_come_from_the_weights(self):
+        # The repo taxonomy is at 230 while the trained detector has 225. A README built from
+        # the taxonomy would advertise five classes the model cannot predict, so the reader
+        # must go to the checkpoint. Here: it returns None rather than a fallback list.
+        from clashrl.model_pack import _class_names
+        from pathlib import Path
+        self.assertIsNone(_class_names(Path(__file__)))     # not a checkpoint at all
+
+
+def _cfg():
+    from clashrl.config import Config
+    return Config.load(None)
+
 if __name__ == "__main__":
     unittest.main()
