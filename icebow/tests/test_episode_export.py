@@ -246,5 +246,35 @@ class TestScrub(unittest.TestCase):
         self.assertEqual(changed, [])
         self.assertFalse(named)
 
+
+class TestExportSelection(unittest.TestCase):
+    """One export, one list of parts. The rules that stop a wrong hand-over."""
+
+    def test_nothing_ticked_writes_nothing(self):
+        from clashrl.export import export
+        self.assertEqual(export(_cfg()), {})
+
+    def test_the_readme_names_what_was_LEFT_OUT(self):
+        # "Are the images in there?" has to be answerable from the file itself, not by
+        # opening the archive and looking -- that was the whole problem with two buttons.
+        from clashrl.export import _readme
+        txt = _readme({"vision": {"file": "best.pt", "mb": 39.0, "classes": 225}},
+                      {}, own_only=False)
+        self.assertIn("Not included:", txt)
+        self.assertIn("`images`", txt)
+        self.assertIn("`policy`", txt)
+
+    def test_the_image_warning_is_in_the_readme_when_images_are_in(self):
+        from clashrl.export import _readme
+        txt = _readme({"images": {"files": 10, "size": "1.0 MB"},
+                       "labels": {"files": 10, "size": "0.1 MB"}},
+                      {"dataset_files": 20}, own_only=False)
+        self.assertIn("player and clan names", txt)
+
+    def test_size_formatting_switches_unit_at_a_gigabyte(self):
+        from clashrl.export import _fmt
+        self.assertTrue(_fmt(500 * 1048576).endswith("MB"))
+        self.assertTrue(_fmt(2 * 10**9).endswith("GB"))
+
 if __name__ == "__main__":
     unittest.main()

@@ -331,6 +331,13 @@ def _cmd_observe(args) -> None:
         print(text)
 
 
+def _cmd_export(args) -> None:
+    from .export import export
+    export(Config.load(args.config), out=args.out, vision=args.vision, bars=args.bars,
+           policy=args.policy, labels=args.labels, images=args.images,
+           notebook=args.notebook, own_only=args.own_only)
+
+
 def _cmd_model_pack(args) -> None:
     from .model_pack import model_pack
     model_pack(Config.load(args.config), out=args.out, vision=args.vision,
@@ -853,6 +860,25 @@ def main() -> None:
     mp.add_argument("--policy", action="store_true", help="the playing policy")
     mp.add_argument("--out", default=None, help="output .zip (default: data/exports/...)")
     mp.set_defaults(func=_cmd_model_pack)
+
+    ex = sub.add_parser("export",
+                        help="ONE export: tick the parts (models, labels, screenshots, "
+                             "notebook) and get one zip whose README says exactly what went "
+                             "in and what was left out")
+    ex.add_argument("--vision", action="store_true", help="the board detector (THE vision AI)")
+    ex.add_argument("--bars", action="store_true", help="the health-bar detector")
+    ex.add_argument("--policy", action="store_true", help="the playing policy")
+    ex.add_argument("--labels", action="store_true",
+                    help="dataset labels + class list, WITHOUT the screenshots")
+    ex.add_argument("--images", action="store_true",
+                    help="the screenshots (>1 GB, and they show real player names). Implies "
+                         "--labels: pictures without labels are the private half with none "
+                         "of the use")
+    ex.add_argument("--notebook", action="store_true", help="the Kaggle training notebook")
+    ex.add_argument("--own-only", action="store_true", dest="own_only",
+                    help="leave the imported public frames out of the dataset")
+    ex.add_argument("--out", default=None, help="output .zip (default: data/exports/...)")
+    ex.set_defaults(func=_cmd_export)
 
     mdl = sub.add_parser("models",
                          help="which NETWORKS exist and which one each path actually uses -- there "

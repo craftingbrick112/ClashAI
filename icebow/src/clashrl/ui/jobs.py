@@ -271,41 +271,12 @@ COMMANDS: List[Dict[str, Any]] = [
         ],
     },
     {
-        # The 8 GB card caps this machine at yolo11s/batch 3 @ 960 px. Every better detector we
-        # have was trained somewhere else, which meant the one step that made it possible was
-        # the only one with no button -- so it did not exist for anyone working from the panel.
-        "cmd": "detect-pack",
-        "group": "Vision AI", "stage": "train",
-        "title": "4b. Pack the dataset to train elsewhere",
-        "desc": "Writes ONE zip of everything the detector trains on, plus a ready-to-run "
-                "notebook, into data/exports/. Upload that to a rented or free GPU (Kaggle "
-                "gives two T4s), train there, and bring the weights back with Models -> import. "
-                "This machine's 8 GB caps training at the small model; the big one came from "
-                "here. Nothing is uploaded by this button -- it only writes the file.",
-        "gpu": False,
-        "metrics": False,
-        "args": [
-            # HYPHENATED on purpose: build_argv emits `--{name}` verbatim, and the CLI declares
-            # `--many-files` / `--own-only`. An underscore here spawns a flag argparse rejects.
-            {"name": "many-files", "type": "bool", "default": False,
-             "label": "Loose files instead of one archive",
-             "help": "Leave OFF. The frames normally go inside a single tar because Kaggle's "
-                     "uploader crashes while listing ~19,000 separate files. Turn it on only "
-                     "for a host that insists on loose files."},
-            {"name": "own-only", "type": "bool", "default": False,
-             "label": "Only my own labelled frames",
-             "help": "Leaves out the 6,623 imported frames, keeping the 2,108 labelled here. "
-                     "The result CANNOT train a good detector on its own -- it is for a target "
-                     "that already has the imported half."},
-        ],
-    },
-    {
         # The whole hand-off to the simulator was CLI-only: `run.py observe` on one saved
         # frame. One frame is a snapshot, and a simulator learns from a MATCH -- so the thing
         # the project actually needs to export had no button at all.
         "cmd": "episode",
         "group": "Vision AI", "stage": "use",
-        "title": "6. Record a match for the simulator",
+        "title": "5. Record a match for the simulator",
         "desc": "Start a match, then press Start. Writes the whole match to one .jsonl in "
                 "data/exports/ and stops by itself when the match ends -- every tick with "
                 "unit positions in arena tiles, per-unit HP, the clock, crowns, what each "
@@ -347,40 +318,56 @@ COMMANDS: List[Dict[str, Any]] = [
         ],
     },
     {
-        # Nobody could ever get a model out of here. `.gitignore` excludes `data/` and `*.pt`,
-        # and across the whole history of every branch not one weight file has been committed
-        # -- correctly, since git keeps every version forever. But the other half of that
-        # decision was never made: if the weights cannot live in the repo, something has to
-        # hand them out. People asking for the model were sent to a path that does not exist.
-        "cmd": "model-pack",
+        # ONE export. There used to be two buttons -- dataset and models -- with different
+        # names, different outputs and no way to see what the other had put in. Anyone handing
+        # something over had to know which button meant which half, and "are the images in
+        # there?" could only be answered by opening the zip.
+        "cmd": "export",
         "group": "Vision AI", "stage": "use",
-        "title": "7. Pack the models to share them",
-        "desc": "Writes ONE zip into data/exports/ with the models you tick below, plus a "
-                "README that states each file's size, its date and (for the detectors) the "
-                "class list read out of the weights themselves. That last part matters: the "
-                "taxonomy in the repo is at 230 classes while the trained detector still has "
-                "225, so a README quoting the repo would advertise five classes the model "
-                "cannot predict.\n\n"
-                "This is the file you attach to a GitHub Release. Nothing is uploaded here, "
-                "and the API token is refused even if it is sitting in the way.",
+        "title": "6. Export -- pick what you hand over",
+        "desc": "Tick the parts, get ONE zip in data/exports/ with a README inside that lists "
+                "exactly what went in, what it weighs, and what was deliberately left out. "
+                "Nothing is uploaded -- it writes a file and you decide where it goes.\n\n"
+                "Models are tens of MB. The screenshots are over a gigabyte and show real "
+                "player and clan names, so they are their own tick-box and stay out unless "
+                "you ask for them.",
         "gpu": False,
         "metrics": False,
         "args": [
             {"name": "vision", "type": "bool", "default": True,
-             "label": "Board detector (THE vision AI)",
-             "help": "runs/detect/vision/weights/best.pt -- which unit is where. This is the "
-                     "one people ask for. Its model card (mAP, epochs, training set size) is "
-                     "packed alongside it."},
+             "label": "Model: board detector (THE vision AI)",
+             "help": "Which unit is where. This is the one people ask for. Its model card "
+                     "(mAP, epochs, training set size) is packed next to it, and its class "
+                     "list is read out of the weights rather than from the repo -- those two "
+                     "have diverged, so the repo's list would advertise classes the model "
+                     "cannot predict."},
             {"name": "bars", "type": "bool", "default": False,
-             "label": "Health-bar detector",
-             "help": "runs/bars/v1/weights/best.pt -- a separate 2-class model that finds HP "
-                     "bars. Optional for a consumer: without it every unit's `hp` is null and "
-                     "nothing else changes."},
+             "label": "Model: health-bar detector",
+             "help": "A separate 2-class model that finds HP bars. Optional for whoever gets "
+                     "it: without it every unit's `hp` reads null and nothing else changes."},
             {"name": "policy", "type": "bool", "default": False,
-             "label": "Playing policy",
-             "help": "The network that decides which card goes where. Nothing to do with "
-                     "vision. Packs whichever checkpoint `play` would actually load, so what "
-                     "you share is what runs."},
+             "label": "Model: playing policy",
+             "help": "Decides which card goes where. Nothing to do with vision. Packs the "
+                     "checkpoint `play` would actually load, so what you share is what runs."},
+            {"name": "labels", "type": "bool", "default": False,
+             "label": "Dataset: labels + class list (no pictures)",
+             "help": "A few MB. Shows what was annotated and how, and cannot train anything "
+                     "on its own. This is the safe half -- no screenshots."},
+            {"name": "images", "type": "bool", "default": False,
+             "label": "Dataset: the screenshots (over 1 GB)",
+             "help": "The part that makes the dataset trainable AND the part that shows real "
+                     "player and clan names. Ticking this also brings the labels, because "
+                     "pictures without labels are the private half with none of the use. "
+                     "Think before you hand this to someone."},
+            {"name": "notebook", "type": "bool", "default": False,
+             "label": "Kaggle training notebook",
+             "help": "A ready-to-import notebook that trains on the dataset above. Only makes "
+                     "sense together with the pictures."},
+            {"name": "own-only", "type": "bool", "default": False,
+             "label": "...and only OUR own labelled frames",
+             "help": "Leaves the imported public frames out of the dataset. The result cannot "
+                     "train a good detector by itself -- it is for someone who already holds "
+                     "the imported half."},
         ],
     },
     {
